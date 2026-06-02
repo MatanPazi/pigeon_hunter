@@ -1,6 +1,11 @@
-def main():
-    print("Hello from pigeon-hunter!")
+import cv2
 
+cap = cv2.VideoCapture(0)
 
-if __name__ == "__main__":
-    main()
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    cv2.imwrite("frame.jpg", frame)
+    break
