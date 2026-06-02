@@ -1,11 +1,10 @@
+from picamera2 import Picamera2
 import cv2
 
-cap = cv2.VideoCapture(0)
+picam2 = Picamera2()
+picam2.start()
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+frame = picam2.capture_array()
+cv2.imwrite("frame.jpg", frame)
 
-    cv2.imwrite("frame.jpg", frame)
-    break
+print("saved frame.jpg")
