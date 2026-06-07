@@ -1,5 +1,9 @@
 import cv2
 import platform
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = BASE_DIR / "data"
 
 def is_raspberry_pi() -> bool:
     """Return True if running on any Raspberry Pi."""
@@ -7,19 +11,44 @@ def is_raspberry_pi() -> bool:
     return machine in ('armv6l', 'armv7l', 'aarch64')
 
 def capture():
+    from datetime import datetime
+    import time
     from picamera2 import Picamera2
+
+    INTERVAL_SEC = 1
+    DURATION_SEC = 10
+
     picam2 = Picamera2()
+
+    config = picam2.create_still_configuration(
+        main={"size": (640, 480)}
+    )
+
+    picam2.configure(config)
     picam2.start()
 
-    frame = picam2.capture_array()
-    cv2.imwrite("frame.png", frame)
+    time.sleep(2)
 
-    print("saved frame.png")
+    num_images = DURATION_SEC // INTERVAL_SEC
+
+    for i in range(num_images):
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        filename = DATA_DIR / f"{timestamp}.jpg"
+
+        picam2.capture_file(str(filename))
+
+        # if i % 10 == 0:
+        print(f"{i}/{num_images}")
+
+        time.sleep(INTERVAL_SEC)
+
+    picam2.stop()
 
 
 def processing():
     import numpy as np
-    from pathlib import Path
 
     # ---------- PARAMETERS ----------
 
@@ -35,8 +64,6 @@ def processing():
     frame = cv2.imread("/home/matan/Matan/Repos/pigeon_hunter/data/balcony_with_pigeon_on_railing.png")
 
     # Save originals
-    BASE_DIR = Path(__file__).resolve().parents[1]
-    DATA_DIR = BASE_DIR / "data"
     cv2.imwrite(str(DATA_DIR / "01_background.png"), background)
     cv2.imwrite(str(DATA_DIR / "02_input.png"), frame)
 
@@ -131,6 +158,8 @@ if __name__ == "__main__":
     if is_raspberry_pi():
         print("Running on Raspberry Pi")
         capture()
+        # Grab image from Pi by PC:
+        # scp matan@raspberrypi:~/Repos/pigeon_hunter/frame.png ~/Matan/Repos/pigeon_hunter/data
     else:
         print("🖥️  Running on Linux PC (x86_64 or other)")
         processing()
