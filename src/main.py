@@ -10,113 +10,127 @@
 # print("saved frame.png")
 
 
-import cv2
-import numpy as np
-from pathlib import Path
+# import cv2
+# import numpy as np
+# from pathlib import Path
 
-# ---------- PARAMETERS ----------
+# # ---------- PARAMETERS ----------
 
-THRESHOLD = 10
-MIN_AREA = 500
-MAX_AREA = 20000
+# THRESHOLD = 10
+# MIN_AREA = 500
+# MAX_AREA = 20000
 
-kernel = np.ones((7,7), np.uint8)
+# kernel = np.ones((7,7), np.uint8)
 
-# ---------- LOAD IMAGES ----------
+# # ---------- LOAD IMAGES ----------
 
-background = cv2.imread("/home/matan/Matan/Repos/pigeon_hunter/data/balcony_smartphone_img.png")
-frame = cv2.imread("/home/matan/Matan/Repos/pigeon_hunter/data/balcony_with_pigeon_on_railing.png")
+# background = cv2.imread("/home/matan/Matan/Repos/pigeon_hunter/data/balcony_smartphone_img.png")
+# frame = cv2.imread("/home/matan/Matan/Repos/pigeon_hunter/data/balcony_with_pigeon_on_railing.png")
 
-# Save originals
-BASE_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = BASE_DIR / "data"
-cv2.imwrite(str(DATA_DIR / "01_background.png"), background)
-cv2.imwrite(str(DATA_DIR / "02_input.png"), frame)
+# # Save originals
+# BASE_DIR = Path(__file__).resolve().parents[1]
+# DATA_DIR = BASE_DIR / "data"
+# cv2.imwrite(str(DATA_DIR / "01_background.png"), background)
+# cv2.imwrite(str(DATA_DIR / "02_input.png"), frame)
 
-# ---------- GRAYSCALE ----------
+# # ---------- GRAYSCALE ----------
 
-bg_gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
-frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+# bg_gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
+# frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-cv2.imwrite(str(DATA_DIR / "03_background_gray.png"), bg_gray)
-cv2.imwrite(str(DATA_DIR / "04_frame_gray.png"), frame_gray)
+# cv2.imwrite(str(DATA_DIR / "03_background_gray.png"), bg_gray)
+# cv2.imwrite(str(DATA_DIR / "04_frame_gray.png"), frame_gray)
 
-# ---------- DIFFERENCE ----------
+# # ---------- DIFFERENCE ----------
 
-diff = cv2.absdiff(frame_gray, bg_gray)
+# diff = cv2.absdiff(frame_gray, bg_gray)
 
-cv2.imwrite(str(DATA_DIR / "05_difference.png"), diff)
+# cv2.imwrite(str(DATA_DIR / "05_difference.png"), diff)
 
-# ---------- THRESHOLD ----------
+# # ---------- THRESHOLD ----------
 
-_, thresh = cv2.threshold(diff, THRESHOLD, 255, cv2.THRESH_BINARY)
+# _, thresh = cv2.threshold(diff, THRESHOLD, 255, cv2.THRESH_BINARY)
 
-cv2.imwrite(str(DATA_DIR / "06_threshold.png"), thresh)
+# cv2.imwrite(str(DATA_DIR / "06_threshold.png"), thresh)
 
-# # ---------- OPEN (remove isolated pixels) ----------
+# # # ---------- OPEN (remove isolated pixels) ----------
 
-# opened = cv2.morphologyEx(
+# # opened = cv2.morphologyEx(
+# #     thresh,
+# #     cv2.MORPH_OPEN,
+# #     kernel
+# # )
+
+# # cv2.imwrite(str(DATA_DIR / "07_open.png"), opened)
+
+# # ---------- CLOSE (fill holes) ----------
+
+# closed = cv2.morphologyEx(
 #     thresh,
-#     cv2.MORPH_OPEN,
+#     cv2.MORPH_CLOSE,
 #     kernel
 # )
 
-# cv2.imwrite(str(DATA_DIR / "07_open.png"), opened)
+# cv2.imwrite(str(DATA_DIR / "08_close.png"), closed)
 
-# ---------- CLOSE (fill holes) ----------
+# # ---------- FIND CONTOURS ----------
 
-closed = cv2.morphologyEx(
-    thresh,
-    cv2.MORPH_CLOSE,
-    kernel
-)
+# contours, _ = cv2.findContours(
+#     closed,
+#     cv2.RETR_EXTERNAL,
+#     cv2.CHAIN_APPROX_SIMPLE
+# )
 
-cv2.imwrite(str(DATA_DIR / "08_close.png"), closed)
+# output = frame.copy()
 
-# ---------- FIND CONTOURS ----------
+# bird_found = False
 
-contours, _ = cv2.findContours(
-    closed,
-    cv2.RETR_EXTERNAL,
-    cv2.CHAIN_APPROX_SIMPLE
-)
+# for contour in contours:
 
-output = frame.copy()
+#     area = cv2.contourArea(contour)
 
-bird_found = False
+#     if area < MIN_AREA or area > MAX_AREA:
+#         continue
 
-for contour in contours:
+#     x, y, w, h = cv2.boundingRect(contour)
 
-    area = cv2.contourArea(contour)
+#     aspect_ratio = w / h
 
-    if area < MIN_AREA or area > MAX_AREA:
-        continue
+#     if 0.2 < aspect_ratio < 2:
 
-    x, y, w, h = cv2.boundingRect(contour)
+#         bird_found = True
+#         cv2.rectangle(
+#             output,
+#             (x, y),
+#             (x+w, y+h),
+#             (0,255,0),
+#             2
+#         )
 
-    aspect_ratio = w / h
+#         cv2.putText(
+#             output,
+#             f"A={int(area)}",
+#             (x, y-10),
+#             cv2.FONT_HERSHEY_SIMPLEX,
+#             0.5,
+#             (0,255,0),
+#             2
+#         )
 
-    if 0.2 < aspect_ratio < 2:
+# cv2.imwrite(str(DATA_DIR / "09_detection.png"), output)
 
-        bird_found = True
-        cv2.rectangle(
-            output,
-            (x, y),
-            (x+w, y+h),
-            (0,255,0),
-            2
-        )
+# print("Bird found =", bird_found)
 
-        cv2.putText(
-            output,
-            f"A={int(area)}",
-            (x, y-10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0,255,0),
-            2
-        )
+import platform
 
-cv2.imwrite(str(DATA_DIR / "09_detection.png"), output)
+def get_platform_info():
+    print("System:", platform.system())
+    print("Machine:", platform.machine())      # e.g. 'armv7l' or 'aarch64' on Pi
+    print("Processor:", platform.processor())
+    print("Platform:", platform.platform())
+    
+    # Common Pi indicators
+    if platform.machine() in ('armv7l', 'aarch64') and platform.system() == 'Linux':
+        print("Likely ARM Linux (could be Raspberry Pi)")
 
-print("Bird found =", bird_found)
+get_platform_info()
