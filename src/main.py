@@ -14,6 +14,7 @@ def capture():
     from datetime import datetime
     import time
     from picamera2 import Picamera2
+    from libcamera import controls
 
     INTERVAL_SEC = 1
     DURATION_SEC = 10
@@ -21,7 +22,15 @@ def capture():
     picam2 = Picamera2()
 
     config = picam2.create_still_configuration(
-        main={"size": (640, 480)}
+        main={"size": (640, 480)},      # Keep small for speed/stability
+        controls={
+            "ExposureTime": 30000,      # 30ms
+            "AnalogueGain": 1.0,
+            "Brightness": 0.0,
+            "Contrast": 1.0,
+            "AeEnable": False,
+            "AwbMode": controls.AwbModeEnum.Auto,
+        }
     )
 
     picam2.configure(config)
@@ -45,7 +54,7 @@ def capture():
         time.sleep(INTERVAL_SEC)
 
     picam2.stop()
-
+    picam2.close()
 
 def processing():
     import numpy as np
