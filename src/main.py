@@ -21,7 +21,7 @@ def capture():
     picam2 = Picamera2()
 
     config = picam2.create_still_configuration(
-        main={"size": (640, 480)}
+        main={"size": (1296, 972)}
     )
 
     picam2.configure(config)
