@@ -16,7 +16,7 @@ def capture():
     from picamera2 import Picamera2
 
     INTERVAL_SEC = 1
-    DURATION_SEC = 10
+    DURATION_SEC = 3600
 
     picam2 = Picamera2()
 
