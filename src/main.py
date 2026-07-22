@@ -3,7 +3,7 @@ import platform
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = BASE_DIR / "data/pigeon_detected_1"
 
 def is_raspberry_pi() -> bool:
     """Return True if running on any Raspberry Pi."""
@@ -52,106 +52,128 @@ def processing():
 
     # ---------- PARAMETERS ----------
 
-    THRESHOLD = 10
-    MIN_AREA = 500
+    THRESHOLD = 15
+    MIN_AREA = 150
     MAX_AREA = 20000
-
+    ALPHA = 0.001          # ← Weighted update rate (smaller = slower adaptation)
     kernel = np.ones((7,7), np.uint8)
 
-    # ---------- LOAD IMAGES ----------
+    # ---------- LOAD ALL IMAGES ----------
+    image_files = sorted([f for f in DATA_DIR.glob("*.jpg") if f.is_file()])
+    if len(image_files) < 2:
+        print("❌ Need at least 2 .jpg images in the data folder.")
+        return
 
-    background = cv2.imread("/home/matan/Matan/Repos/pigeon_hunter/data/balcony_smartphone_img.png")
-    frame = cv2.imread("/home/matan/Matan/Repos/pigeon_hunter/data/balcony_with_pigeon_on_railing.png")
+    # First image = initial background
+    background = cv2.imread(str(image_files[0]))
+    if background is None:
+        print("❌ Could not load background image.")
+        return
 
-    # Save originals
+    print(f"✅ Using {image_files[0].name} as initial background")
     cv2.imwrite(str(DATA_DIR / "01_background.png"), background)
-    cv2.imwrite(str(DATA_DIR / "02_input.png"), frame)
 
-    # ---------- GRAYSCALE ----------
+    # Background model for weighted averaging
+    bg_model = background.astype(np.float32)
 
-    bg_gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
-    frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-    cv2.imwrite(str(DATA_DIR / "03_background_gray.png"), bg_gray)
-    cv2.imwrite(str(DATA_DIR / "04_frame_gray.png"), frame_gray)
-
-    # ---------- DIFFERENCE ----------
-
-    diff = cv2.absdiff(frame_gray, bg_gray)
-
-    cv2.imwrite(str(DATA_DIR / "05_difference.png"), diff)
-
-    # ---------- THRESHOLD ----------
-
-    _, thresh = cv2.threshold(diff, THRESHOLD, 255, cv2.THRESH_BINARY)
-
-    cv2.imwrite(str(DATA_DIR / "06_threshold.png"), thresh)
-
-    # # ---------- OPEN (remove isolated pixels) ----------
-
-    # opened = cv2.morphologyEx(
-    #     thresh,
-    #     cv2.MORPH_OPEN,
-    #     kernel
-    # )
-
-    # cv2.imwrite(str(DATA_DIR / "07_open.png"), opened)
-
-    # ---------- CLOSE (fill holes) ----------
-
-    closed = cv2.morphologyEx(
-        thresh,
-        cv2.MORPH_CLOSE,
-        kernel
-    )
-
-    cv2.imwrite(str(DATA_DIR / "08_close.png"), closed)
-
-    # ---------- FIND CONTOURS ----------
-
-    contours, _ = cv2.findContours(
-        closed,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
-
-    output = frame.copy()
-
-    bird_found = False
-
-    for contour in contours:
-
-        area = cv2.contourArea(contour)
-
-        if area < MIN_AREA or area > MAX_AREA:
+    for idx, frame_path in enumerate(image_files[1:], 1):
+        frame = cv2.imread(str(frame_path))
+        if frame is None:
+            print(f"⚠️ Could not load {frame_path.name}")
             continue
 
-        x, y, w, h = cv2.boundingRect(contour)
+        print(f"Processing {frame_path.name} ({idx}/{len(image_files)-1})")
 
-        aspect_ratio = w / h
+        # cv2.imwrite(str(DATA_DIR / f"02_input_{idx:03d}.png"), frame)
 
-        if 0.2 < aspect_ratio < 2:
+        # Grayscale
+        bg_gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+        cv2.imwrite(str(DATA_DIR / f"03_bg_gray_{idx:03d}.png"), bg_gray)
+        cv2.imwrite(str(DATA_DIR / f"04_frame_gray_{idx:03d}.png"), frame_gray)
+
+        # Difference + Threshold
+        diff = cv2.absdiff(frame_gray, bg_gray)
+        cv2.imwrite(str(DATA_DIR / f"05_difference_{idx:03d}.png"), diff)
+
+        _, thresh = cv2.threshold(diff, THRESHOLD, 255, cv2.THRESH_BINARY)
+        cv2.imwrite(str(DATA_DIR / f"06_threshold_{idx:03d}.png"), thresh)
+
+        # Morphology
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        cv2.imwrite(str(DATA_DIR / f"08_close_{idx:03d}.png"), closed)
+
+        # Contours & Detection
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        output = frame.copy()
+        bird_found = False
+
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < MIN_AREA or area > MAX_AREA:
+                continue
+
+            # === Rotated Bounding Box ===
+            rect = cv2.minAreaRect(contour)
+            box = cv2.boxPoints(rect)
+            box = box.astype(np.int32)                    # convert to integer coordinates
+
+            # Get width and height from rotated rect
+            width = rect[1][0]
+            height = rect[1][1]
+            aspect_ratio = max(width, height) / min(width, height) if min(width, height) > 0 else 0
+
+            # Filters
+            if width < 15 or height < 15:           # too thin in any direction
+                continue
+            if aspect_ratio < 0.18 or aspect_ratio > 3.5:   # stricter for pigeons
+                continue
+
+            # Thin object filter (helps with flapping strips)
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter > 0:
+                circularity = 4 * np.pi * area / (perimeter * perimeter)
+                if circularity < 0.04:              # very low = thin line-like
+                    continue
+
+            # === Valid detection ===
             bird_found = True
-            cv2.rectangle(
-                output,
-                (x, y),
-                (x+w, y+h),
-                (0,255,0),
-                2
-            )
+
+            # Draw rotated rectangle
+            cv2.drawContours(output, [box], 0, (0, 255, 0), 2)
+
+            # Text label
+            label = f"A={int(area)} AR={aspect_ratio:.2f}"
+
+            # Calculate text position (inside the box, top-centered)
+            text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.48, 2)[0]
+            text_w, text_h = text_size
+
+            # Center horizontally
+            text_x = int(rect[0][0] - text_w / 2)   # use center of rotated rect
+            text_y = int(rect[0][1] - (height / 2) + text_h + 8)  # near top of box
+
+            # Safety: keep text inside frame
+            text_y = max(text_y, text_h + 10)
 
             cv2.putText(
                 output,
-                f"A={int(area)}",
-                (x, y-10),
+                label,
+                (text_x, text_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0,255,0),
+                0.48,
+                (0, 255, 0),
                 2
             )
 
-    cv2.imwrite(str(DATA_DIR / "09_detection.png"), output)
+        cv2.imwrite(str(DATA_DIR / f"09_detection_{idx:03d}.png"), output)
+
+        # === Weighted Background Update ===
+        cv2.accumulateWeighted(frame, bg_model, ALPHA)
+        background = bg_model.astype(np.uint8)   # update for next iteration
+
+    print("✅ All images processed! Check the `data/` folder.")
 
 # Simple usage
 if __name__ == "__main__":
