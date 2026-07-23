@@ -52,7 +52,7 @@ def processing():
 
     # ---------- PARAMETERS ----------
 
-    THRESHOLD = 15
+    THRESHOLD = 100
     MIN_AREA = 150
     MAX_AREA = 20000
     ALPHA = 0.001          # ← Weighted update rate (smaller = slower adaptation)
@@ -71,7 +71,7 @@ def processing():
         return
 
     print(f"✅ Using {image_files[0].name} as initial background")
-    cv2.imwrite(str(DATA_DIR / "01_background.png"), background)
+    # cv2.imwrite(str(DATA_DIR / "01_background.png"), background)
 
     # Background model for weighted averaging
     bg_model = background.astype(np.float32)
@@ -90,19 +90,24 @@ def processing():
         bg_gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        cv2.imwrite(str(DATA_DIR / f"03_bg_gray_{idx:03d}.png"), bg_gray)
-        cv2.imwrite(str(DATA_DIR / f"04_frame_gray_{idx:03d}.png"), frame_gray)
+        # cv2.imwrite(str(DATA_DIR / f"03_bg_gray_{idx:03d}.png"), bg_gray)
+        # cv2.imwrite(str(DATA_DIR / f"04_frame_gray_{idx:03d}.png"), frame_gray)
 
         # Difference + Threshold
         diff = cv2.absdiff(frame_gray, bg_gray)
-        cv2.imwrite(str(DATA_DIR / f"05_difference_{idx:03d}.png"), diff)
+
+        # Add light blurring before thresholding (removes small noise)
+        diff = cv2.GaussianBlur(diff, (5, 5), 0)
+
+        # cv2.imwrite(str(DATA_DIR / f"05_difference_{idx:03d}.png"), diff)
 
         _, thresh = cv2.threshold(diff, THRESHOLD, 255, cv2.THRESH_BINARY)
-        cv2.imwrite(str(DATA_DIR / f"06_threshold_{idx:03d}.png"), thresh)
+        # cv2.imwrite(str(DATA_DIR / f"06_threshold_{idx:03d}.png"), thresh)
 
         # Morphology
         closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        cv2.imwrite(str(DATA_DIR / f"08_close_{idx:03d}.png"), closed)
+        # closed = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel)
+        # cv2.imwrite(str(DATA_DIR / f"08_close_{idx:03d}.png"), closed)
 
         # Contours & Detection
         contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -167,7 +172,7 @@ def processing():
                 2
             )
 
-        cv2.imwrite(str(DATA_DIR / f"09_detection_{idx:03d}.png"), output)
+            cv2.imwrite(str(DATA_DIR / f"09_detection_{idx:03d}.png"), output)
 
         # === Weighted Background Update ===
         cv2.accumulateWeighted(frame, bg_model, ALPHA)
