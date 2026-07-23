@@ -1,9 +1,18 @@
 import cv2
 import platform
 from pathlib import Path
+import numpy as np
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data/pigeon_detected_1"
+
+# ---------- PARAMETERS ----------
+
+THRESHOLD = 100
+MIN_AREA = 150
+MAX_AREA = 20000
+ALPHA = 0.001          # ← Weighted update rate (smaller = slower adaptation)
+kernel = np.ones((7,7), np.uint8)
 
 def is_raspberry_pi() -> bool:
     """Return True if running on any Raspberry Pi."""
@@ -31,13 +40,96 @@ def capture():
 
     num_images = DURATION_SEC // INTERVAL_SEC
 
+    background = picam2.capture_array()
+    background = cv2.cvtColor(background, cv2.COLOR_RGB2BGR)  # picam2 returns RGB. cv2 requires BGR
+    bg_model = background.astype(np.float32)
+
     for i in range(num_images):
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        frame = picam2.capture_array()
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)   # Convert to BGR for OpenCV
 
-        filename = DATA_DIR / f"{timestamp}.jpg"
+        # === Processing ===
+        bg_gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
+        frame_gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
 
-        picam2.capture_file(str(filename))
+        diff = cv2.absdiff(frame_gray, bg_gray)
+        diff = cv2.GaussianBlur(diff, (5, 5), 0)
+
+        _, thresh = cv2.threshold(diff, THRESHOLD, 255, cv2.THRESH_BINARY)
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        output = frame_bgr.copy()
+        contour_cntr = 0
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < MIN_AREA or area > MAX_AREA:
+                continue
+
+            # === Rotated Bounding Box ===
+            rect = cv2.minAreaRect(contour)
+            box = cv2.boxPoints(rect)
+            box = box.astype(np.int32)                    # convert to integer coordinates
+
+            # Get width and height from rotated rect
+            width = rect[1][0]
+            height = rect[1][1]
+            aspect_ratio = max(width, height) / min(width, height) if min(width, height) > 0 else 0
+
+            # Filters
+            if width < 15 or height < 15:           # too thin in any direction
+                continue
+            if aspect_ratio < 0.18 or aspect_ratio > 3.5:   # stricter for pigeons
+                continue
+
+            # Thin object filter (helps with flapping strips)
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter > 0:
+                circularity = 4 * np.pi * area / (perimeter * perimeter)
+                if circularity < 0.04:              # very low = thin line-like
+                    continue
+
+            # === Valid detection ===
+            bird_found = True
+
+            # Draw rotated rectangle
+            cv2.drawContours(output, [box], 0, (0, 255, 0), 2)
+
+            # Text label
+            label = f"A={int(area)} AR={aspect_ratio:.2f}"
+
+            # Calculate text position (inside the box, top-centered)
+            text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.48, 2)[0]
+            text_w, text_h = text_size
+
+            # Center horizontally
+            text_x = int(rect[0][0] - text_w / 2)   # use center of rotated rect
+            text_y = int(rect[0][1] - (height / 2) + text_h + 8)  # near top of box
+
+            # Safety: keep text inside frame
+            text_y = max(text_y, text_h + 10)
+
+            cv2.putText(
+                output,
+                label,
+                (text_x, text_y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.48,
+                (0, 255, 0),
+                2
+            )
+
+            # Save both original and annotated
+            cv2.imwrite(str(DATA_DIR / f"detected_{contour_cntr:03d}.png"), output)
+            contour_cntr += 1
+            
+        cv2.imwrite(str(DATA_DIR / f"{timestamp}_original.jpg"), frame_bgr)
+
+        # === Weighted Background Update ===
+        cv2.accumulateWeighted(frame, bg_model, ALPHA)
+        background = bg_model.astype(np.uint8)   # update for next iteration        
 
         # if i % 10 == 0:
         print(f"{i}/{num_images}")
@@ -48,15 +140,6 @@ def capture():
 
 
 def processing():
-    import numpy as np
-
-    # ---------- PARAMETERS ----------
-
-    THRESHOLD = 100
-    MIN_AREA = 150
-    MAX_AREA = 20000
-    ALPHA = 0.001          # ← Weighted update rate (smaller = slower adaptation)
-    kernel = np.ones((7,7), np.uint8)
 
     # ---------- LOAD ALL IMAGES ----------
     image_files = sorted([f for f in DATA_DIR.glob("*.jpg") if f.is_file()])
