@@ -123,6 +123,7 @@ def capture():
 
             # Save both original and annotated
             cv2.imwrite(str(DATA_DIR / f"detected_{contour_cntr:03d}.png"), output)
+            print(f"{i}_detected!")
             contour_cntr += 1
             
         cv2.imwrite(str(DATA_DIR / f"{timestamp}_original.jpg"), frame_bgr)
@@ -131,8 +132,8 @@ def capture():
         cv2.accumulateWeighted(frame, bg_model, ALPHA)
         background = bg_model.astype(np.uint8)   # update for next iteration        
 
-        # if i % 10 == 0:
-        print(f"{i}/{num_images}")
+        if i % 10 == 0:
+            print(f"{i}/{num_images}")
 
         time.sleep(INTERVAL_SEC)
 
