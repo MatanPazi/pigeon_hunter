@@ -122,7 +122,7 @@ def capture():
             )
 
             # Save both original and annotated
-            cv2.imwrite(str(DATA_DIR / f"detected_{contour_cntr:03d}.png"), output)
+            cv2.imwrite(str(DATA_DIR / f"{timestamp}_detected_{contour_cntr:03d}.jpg"), output)
             print(f"{i}_detected!")
             contour_cntr += 1
             
