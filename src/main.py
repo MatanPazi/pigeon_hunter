@@ -9,9 +9,9 @@ DATA_DIR = BASE_DIR / "data"
 # ---------- PARAMETERS ----------
 
 THRESHOLD = 100
-MIN_AREA = 150
-MAX_AREA = 20000
-ALPHA = 0.001          # ← Weighted update rate (smaller = slower adaptation)
+MIN_AREA = 250
+MAX_AREA = 5000
+ALPHA = 0.5          # ← Weighted update rate (smaller = slower adaptation)
 kernel = np.ones((7,7), np.uint8)
 
 def is_raspberry_pi() -> bool:
@@ -263,8 +263,9 @@ def processing():
             cv2.imwrite(str(DATA_DIR / f"{frame_path.name}_{idx:03d}_detection.png"), output)
 
         # === Weighted Background Update ===
-        cv2.accumulateWeighted(frame, bg_model, ALPHA)
-        background = bg_model.astype(np.uint8)   # update for next iteration
+        if not bird_found:
+            cv2.accumulateWeighted(frame, bg_model, ALPHA)
+            background = bg_model.astype(np.uint8)   # update for next iteration
 
     print("✅ All images processed! Check the `data/` folder.")
 
