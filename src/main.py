@@ -11,7 +11,7 @@ DATA_DIR = BASE_DIR / "data"
 THRESHOLD = 100
 MIN_AREA = 250
 MAX_AREA = 5000
-ALPHA = 0.5          # ← Weighted update rate (smaller = slower adaptation)
+ALPHA = 0.1          # ← Weighted update rate (smaller = slower adaptation)
 kernel = np.ones((7,7), np.uint8)
 
 def is_raspberry_pi() -> bool:
