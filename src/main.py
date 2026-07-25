@@ -256,7 +256,11 @@ def processing():
                 2
             )
 
-            cv2.imwrite(str(DATA_DIR / f"09_detection_{idx:03d}.png"), output)
+            print(f"✅ Detected contour in {image_files[0].name}")
+            cv2.imwrite(str(DATA_DIR / f"{frame_path.name}_{idx:03d}_difference.png"), diff)
+            cv2.imwrite(str(DATA_DIR / f"{frame_path.name}_{idx:03d}_threshold.png"), thresh)
+            cv2.imwrite(str(DATA_DIR / f"{frame_path.name}_{idx:03d}_close.png"), closed)
+            cv2.imwrite(str(DATA_DIR / f"{frame_path.name}_{idx:03d}_detection.png"), output)
 
         # === Weighted Background Update ===
         cv2.accumulateWeighted(frame, bg_model, ALPHA)
