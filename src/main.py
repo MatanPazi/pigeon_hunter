@@ -109,7 +109,10 @@ class BirdDetector:
                 )
 
         if save_debug and bird_confirmed:
-            cv2.imwrite(f"{save_prefix}_confirmed_detection.jpg", output)
+            cv2.imwrite(f"{save_prefix}_detection.jpg", output)
+            cv2.imwrite(f"{save_prefix}_diff.jpg", diff)
+            cv2.imwrite(f"{save_prefix}_thresh.jpg", thresh)
+            cv2.imwrite(f"{save_prefix}_closed.jpg", closed)            
             # add other debug saves as needed        
             print(f"Bird detected!")
 
