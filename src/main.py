@@ -183,7 +183,7 @@ def pi_run():
         
         if not bird_found:
             # Background update on if bird not found
-            cv2.accumulateWeighted(frame_rgb, bg_model, ALPHA)
+            cv2.accumulateWeighted(frame_bgr, bg_model, ALPHA)
             background = bg_model.astype(np.uint8)   # update for next iteration
 
         if i % 10 == 0:
