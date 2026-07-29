@@ -247,7 +247,10 @@ if __name__ == "__main__":
         print("Running on Raspberry Pi")
         pi_run()
         # Grab image from Pi by PC:
-        # scp matan@raspberrypi:~/Repos/pigeon_hunter/data/*.jpg ~/Matan/Repos/pigeon_hunter/data
+        # DATE=$(date +%Y-%m-%d) && \
+        # mkdir -p ~/Matan/Repos/pigeon_hunter/data/$DATE && \
+        # scp matan@raspberrypi:~/Repos/pigeon_hunter/data/*.jpg \
+        # ~/Matan/Repos/pigeon_hunter/data/$DATE/
     else:
         print("🖥️  Running on PC")
         pc_run()
