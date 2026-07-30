@@ -10,13 +10,14 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
-THRESHOLD = 100
-MIN_AREA = 250
-MAX_AREA = 5000
-ALPHA = 0.01
+THRESHOLD = 70
+MIN_AREA = 240
+MAX_AREA = 8000
+ALPHA = 0.1          # Bigger ALPHA → Background updates faster
 PERSISTENCE_FRAMES = 5
-POS_TOL = 20
-KERNEL = np.ones((7, 7), np.uint8)
+POS_TOL = 10
+KERNEL_OPEN = np.ones((5, 5), np.uint8)
+KERNEL_CLOSE = np.ones((11, 11), np.uint8)
 
 def is_raspberry_pi() -> bool:
     """Return True if running on any Raspberry Pi."""
@@ -42,7 +43,8 @@ class BirdDetector:
         bird_confirmed = True only after persistence check passes
         """
         # Find candidate detections in the current frame
-        current_candidates = self._find_candidates(frame_bgr, background)
+        current_candidates, diff, thresh, opened, closed = self._find_candidates(frame_bgr, background)
+        candidate_detected = len(current_candidates) > 0
 
         # Update tracks and get confirmed ones
         confirmed_candidates = self._update_tracks(current_candidates)
@@ -52,15 +54,17 @@ class BirdDetector:
         bird_confirmed = len(confirmed_candidates) > 0
 
         if bird_confirmed:
-            self._draw_detections(output, confirmed_candidates)
-            cv2.imwrite(f"{save_prefix}_detection.jpg", output)
+            # self._draw_detections(output, confirmed_candidates)
+            # cv2.imwrite(f"{save_prefix}_detection.jpg", output)
             print("Bird detected!")
 
-            if save_debug:
-                # You can pass the intermediate images if needed
-                pass
+            # if save_debug:
+            #     cv2.imwrite(f"{save_prefix}_diff.jpg", diff)
+            #     cv2.imwrite(f"{save_prefix}_thresh.jpg", thresh)
+            #     cv2.imwrite(f"{save_prefix}_opened.jpg", opened)
+            #     cv2.imwrite(f"{save_prefix}_closed.jpg", closed)                
 
-        return output, bird_confirmed
+        return output, bird_confirmed, candidate_detected
 
     def _find_candidates(self, frame_bgr, background):
         """Return list of (center, area, contour, rect) that pass all filters."""
@@ -71,7 +75,10 @@ class BirdDetector:
         diff = cv2.GaussianBlur(diff, (5, 5), 0)
 
         _, thresh = cv2.threshold(diff, THRESHOLD, 255, cv2.THRESH_BINARY)
-        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, KERNEL)
+
+        # Morphology
+        opened = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, KERNEL_OPEN)
+        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, KERNEL_CLOSE, iterations=1)
 
         contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -83,7 +90,7 @@ class BirdDetector:
 
             rect = cv2.minAreaRect(contour)
             width, height = rect[1]
-            if width < 15 or height < 15:
+            if width < 15 or height < 12:
                 continue
 
             aspect_ratio = max(width, height) / min(width, height) if min(width, height) > 0 else 0
@@ -99,7 +106,7 @@ class BirdDetector:
             center = (int(rect[0][0]), int(rect[0][1]))
             candidates.append((center, area, contour, rect))
 
-        return candidates    
+        return candidates, diff, thresh, opened, closed
 
     def _update_tracks(self, current_candidates):
         """
@@ -208,7 +215,7 @@ def pi_run():
         frame_rgb = picam2.capture_array()
         frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
-        output, bird_found = detector.process_frame(
+        output, bird_found, candidate_detected = detector.process_frame(
             frame_bgr, background,
             save_prefix=str(DATA_DIR / timestamp),
             save_debug=True
@@ -217,7 +224,7 @@ def pi_run():
         # save original
         cv2.imwrite(str(DATA_DIR / f"{timestamp}_original.jpg"), frame_bgr)
         
-        if not bird_found:
+        if not candidate_detected:
             # Background update on if bird not found
             cv2.accumulateWeighted(frame_bgr, bg_model, ALPHA)
             background = bg_model.astype(np.uint8)   # update for next iteration
@@ -264,13 +271,13 @@ def pc_run():
 
         save_prefix = str(DATA_DIR / f"{frame_path.stem}_proc_{idx:03d}")
 
-        output, bird_found = detector.process_frame(
+        output, bird_found, candidate_detected = detector.process_frame(
             frame, background,
             save_prefix=save_prefix,
-            save_debug=False
+            save_debug=True
         )
 
-        if not bird_found:
+        if not candidate_detected:
             # === Weighted Background Update ===
             cv2.accumulateWeighted(frame, bg_model, ALPHA)
             background = bg_model.astype(np.uint8)   # update for next iteration
@@ -290,3 +297,11 @@ if __name__ == "__main__":
     else:
         print("🖥️  Running on PC")
         pc_run()
+
+
+# Issues:
+# clouds
+# flaps moving and showing pigeon shaped backgrounds
+# A pigeon staying in one place for a while, then moving. It's shape stays a faded background.
+# A person appears, big contour, bypassed by filter, bg updates untill it does fit filters -> problematic (?)...
+    # Perhaps if a large contour appears (Most probably person), don't update bg?
